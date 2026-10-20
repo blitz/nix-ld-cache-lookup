@@ -11,6 +11,14 @@
 #include <sys/stat.h>
 
 /*
+ * XXX TODO XXX: This plugin links against glibc, which is a problem: If you use it
+ * in a program that uses another glibc version this results in sadness.
+ *
+ * So we'll need to replace all libc functionality and build this with:
+ * -nostdlib -ffreestanding -fno-stack-protector
+ */
+
+/*
  * The descriptor is a sequence of NUL-terminated (needed, path-list)
  * string pairs, where each path-list element is either
  * =<absolute-path> for a directly resolved library or ?<dir> for a
@@ -47,6 +55,7 @@ static void parse_entry(const char *key, const char *value,
   out->so_name = key;
 
   /* strtok modifies the value it parses. */
+  /* TODO Handle strdup returning NULL. */
   char *copied_value = strdup(value);
   size_t cur_location = 0;
 
@@ -80,6 +89,7 @@ unsigned int la_version(unsigned int version) {
 
   LOG("Found %lu phdrs at %p\n", phnum, phdr);
   // Determine load base for PIE binaries
+  /* TODO A PIE without PT_PHDR leaves load_base at 0 -> wild reads. */
   ElfW(Addr) load_base = 0;
   for (long i = 0; i < phnum; i++) {
     if (phdr[i].p_type == PT_PHDR) {
@@ -98,23 +108,31 @@ unsigned int la_version(unsigned int version) {
       ElfW(Addr) note_start = load_base + phdr[i].p_vaddr;
       ElfW(Addr) note_end = note_start + phdr[i].p_memsz;
 
+
+      size_t align = phdr[i].p_align == 8 ? 8 : 4;
       ElfW(Nhdr) *note = (ElfW(Nhdr) *)note_start;
 
+      /* TODO Check that header, name and desc all fit before note_end. */
       while ((ElfW(Addr))note < note_end) {
         char *name = (char *)note + sizeof(ElfW(Nhdr));
-        void *desc = name + ((note->n_namesz + 3) & ~3);
+        void *desc =
+            (char *)note +
+            ((sizeof(ElfW(Nhdr)) + note->n_namesz + align - 1) & ~(align - 1));
         size_t len = note->n_descsz;
 
+        /* TODO name may not be NUL-terminated. */
         LOG("Note name: %s, Type: 0x%x, Length: %zu\n", name, note->n_type,
             len);
 
+        /* TODO Also match the owner name, n_type alone is not unique. */
         if (note->n_type == 0x63a86cb6U) {
           cache_data = desc;
           cache_len = len;
           goto found;
         }
 
-        note = (ElfW(Nhdr) *)((char *)desc + ((note->n_descsz + 3) & ~3));
+        note = (ElfW(Nhdr) *)((char *)desc +
+                              ((note->n_descsz + align - 1) & ~(align - 1)));
       }
     }
   }
@@ -127,15 +145,17 @@ found:
 
   for (const char *cur = cache_data; cur < cache_data + cache_len;) {
     const char *key = cur;
+    /* TODO strlen may run past cache_data + cache_len. */
     size_t key_len = strlen(cur);
 
     if (key_len == 0)
       break;
 
-    /* TODO Assert bounds */
+    /* TODO val may start past the end, and strlen may run past it. */
     const char *val = cur + key_len + 1;
     size_t val_len = strlen(val);
 
+    /* TODO Check cur_cache_entry < MAX_CACHE_LEN. */
     parse_entry(key, val, &cache[cur_cache_entry++]);
 
     cur = val + val_len + 1;

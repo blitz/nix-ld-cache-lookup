@@ -65,6 +65,22 @@
         "url": "https://channels.nixos.org/nixpkgs-unstable/nixexprs.tar.zst"
       }
     },
+    "nixpkgs-with-cache": {
+      "locked": {
+        "lastModified": 1789940191,
+        "narHash": "sha256-92NOp9KTiDQRgwozv5CBt8nCxHqJmgGApVCtSML6JGA=",
+        "owner": "blitz",
+        "repo": "nixpkgs",
+        "rev": "1c2352db868944b5aa39895217faae9d8e155983",
+        "type": "github"
+      },
+      "original": {
+        "owner": "blitz",
+        "ref": "glibc-resolution-cache",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "patchelf": {
       "inputs": {
         "flake-parts": "flake-parts",
@@ -90,6 +106,7 @@
     "root": {
       "inputs": {
         "nixpkgs": "nixpkgs",
+        "nixpkgs-with-cache": "nixpkgs-with-cache",
         "patchelf": "patchelf"
       }
     }
